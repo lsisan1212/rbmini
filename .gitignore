@@ -1,0 +1,15 @@
+# build artifacts
+.build/
+dist/
+bin/
+.swiftpm/
+Package.resolved
+
+# runtime output (recordings + logs)
+out/
+*.wav
+*.log
+
+# macOS
+.DS_Store
+._*
