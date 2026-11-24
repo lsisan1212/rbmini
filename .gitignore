@@ -10,6 +10,9 @@ out/
 *.wav
 *.log
 
+# regenerable icon intermediate (kept: Resources/RBMini.icns)
+Resources/icon-1024.png
+
 # macOS
 .DS_Store
 ._*

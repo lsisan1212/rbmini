@@ -6,7 +6,7 @@
 極簡替代方案 —— 唔需要 Remote Buddy，唔需要 kernel extension。單一二進位 + 一個 root helper。
 
 ```
-RBMini.app   200 KB  (binary 191 KB)
+RBMini.app   1.6 MB  (binary 210 KB + 圖示 1.4 MB)
 rbhid        124 KB
 ```
 
@@ -73,10 +73,16 @@ RBMini 用兩條完全不同的路徑分別解決。
 ## 建置
 
 ```zsh
-zsh scripts/make-app.sh          # → dist/RBMini.app
+zsh scripts/make-app.sh          # → dist/RBMini.app（含 icon）
 zsh scripts/make-helper.sh       # → dist/rbhid
 sudo zsh scripts/install-helper.sh   # 裝 LaunchDaemon /Library/LaunchDaemons/com.pman.rbhid.plist
 open dist/RBMini.app
+```
+
+改過 `tools/make-icon.swift` 之後要重生圖示：
+
+```zsh
+zsh scripts/make-icns.sh         # → Resources/RBMini.icns
 ```
 
 用非預設簽名身份：
@@ -103,7 +109,7 @@ CODE_SIGN_IDENTITY="Your Identity" zsh scripts/make-app.sh
 
 ## 用法
 
-菜單欄出現 **RBMini**，點開 → **動作映射** → 選鍵 → 選動作。設定存在 `UserDefaults`（`actionMap`），重開保留。
+菜單欄出現 **RBMini**（遙控器圖示 + 名稱）。點開 → **動作映射** → 選鍵 → 選動作。設定存在 `UserDefaults`（`actionMap`），重開保留。
 
 ### 14 個按鍵
 
@@ -117,7 +123,31 @@ CODE_SIGN_IDENTITY="Your Identity" zsh scripts/make-app.sh
 | 返回 | Esc | Input | 播放/暫停 |
 | Home | 切換 App (⌘Tab) | Power | Delete |
 
-可選動作共 18 個：四個方向鍵、Return、Esc、Delete、Tab、Space、切換 App、Mission Control、音量 +／−／靜音、播放暫停、上／下一曲、無。
+### 可選動作（41 項 + 自訂）
+
+每個鍵的子選單按用途分節：
+
+| 分節 | 動作 |
+|---|---|
+| **基本** | ↑ ↓ ← →、Return／Enter、數字鍵盤 Enter、Esc、Tab、Space、Delete（退格）、Delete（向前）、Home、End、Page Up、Page Down |
+| **編輯** | 複製 ⌘C、貼上 ⌘V、剪下 ⌘X、全選 ⌘A、還原 ⌘Z、儲存 ⌘S、尋找 ⌘F |
+| **系統** | 切換 App ⌘Tab、Mission Control、App Exposé、Launchpad、Spotlight ⌘Space、關閉視窗 ⌘W、結束 App ⌘Q、鎖定螢幕 ⌃⌘Q、截圖全螢幕、截圖選取範圍 |
+| **媒體** | 音量 +／−／靜音、亮度 +／−、播放暫停、上一曲／下一曲、向上／向下捲動 |
+| **自訂** | 執行指令／開網址…、清除自訂動作、無 |
+
+### 自訂指令（v0.2 起）
+
+每個鍵都可以綁一條 shell 指令或一個網址。選單選 **執行指令／開網址…**，輸入後按儲存：
+
+| 輸入 | 效果 | 實際儲存 |
+|---|---|---|
+| `open -a Music` | 開音樂 App | `sh:open -a Music` |
+| `osascript -e 'tell app "Finder" to activate'` | 跑 AppleScript | `sh:…` |
+| `https://youtube.com` | 預設瀏覽器開啟 | `open:https://youtube.com` |
+
+以 `http://` / `https://` 開頭自動當網址，其餘一律經 `/bin/zsh -lc` 非同步執行（不阻塞 UI）。設定值存於 `~/Library/Preferences/com.pman.rbmini.plist`。
+
+> ⚠️ 這等於把一個 shell 綁上遙控器。只在自己部機用，別把這個 plist 分享出去。
 
 ### 語音
 
@@ -131,7 +161,8 @@ CODE_SIGN_IDENTITY="Your Identity" zsh scripts/make-app.sh
 - 只編 arm64；Intel Mac 需要改 `-target`
 - 只驗證過 G9N9N（`0x18D1:0x9450`），其他 ATVV 遙控器未測
 - 按鍵路徑依賴 Apple 未公開的 `BTLEServer` 除錯字串格式，macOS 更新可能失效
-- Action table 只有 18 個預設動作，未支援自訂組合鍵錄製
+- 動作表有 41 個預設動作 + 自訂指令，但 **未支援自訂組合鍵錄製**（要 ⌘⇧K 這類組合只能寫 `sh:` 或自行加 case）
+- 「向上／向下捲動」方向受系統「自然捲動」設定影響，覺得反了就把兩個對調
 - 14 鍵中只系統性驗證過「上」（`0x0042`）
 
 ---

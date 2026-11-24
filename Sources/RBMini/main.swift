@@ -603,16 +603,38 @@ let buttonLabels: [String: String] = [
     "youtube": "YouTube", "netflix": "Netflix", "input": "Input", "power": "Power",
 ]
 
-let actionCatalog: [(String, String)] = [
-    ("arrowUp", "↑ 方向鍵上"), ("arrowDown", "↓ 方向鍵下"),
-    ("arrowLeft", "← 方向鍵左"), ("arrowRight", "→ 方向鍵右"),
-    ("returnKey", "Return"), ("escape", "Esc"), ("deleteBackward", "Delete"),
-    ("tab", "Tab"), ("space", "Space"),
-    ("appSwitcher", "切換 App"), ("missionControl", "Mission Control"),
-    ("volumeUp", "音量 +"), ("volumeDown", "音量 −"), ("volumeMute", "靜音"),
-    ("playPause", "播放/暫停"), ("nextTrack", "下一曲"), ("previousTrack", "上一曲"),
-    ("none", "無"),
+let actionGroups: [(String, [(String, String)])] = [
+    ("基本", [
+        ("arrowUp", "↑ 方向鍵上"), ("arrowDown", "↓ 方向鍵下"),
+        ("arrowLeft", "← 方向鍵左"), ("arrowRight", "→ 方向鍵右"),
+        ("returnKey", "Return ／ Enter"), ("keypadEnter", "數字鍵盤 Enter"),
+        ("escape", "Esc"), ("tab", "Tab"), ("space", "Space"),
+        ("deleteBackward", "Delete（退格）"), ("deleteForward", "Delete（向前）"),
+        ("homeKey", "Home"), ("endKey", "End"),
+        ("pageUp", "Page Up"), ("pageDown", "Page Down"),
+    ]),
+    ("編輯", [
+        ("copy", "複製 ⌘C"), ("paste", "貼上 ⌘V"), ("cut", "剪下 ⌘X"),
+        ("selectAll", "全選 ⌘A"), ("undo", "還原 ⌘Z"), ("save", "儲存 ⌘S"),
+        ("find", "尋找 ⌘F"),
+    ]),
+    ("系統", [
+        ("appSwitcher", "切換 App ⌘Tab"), ("missionControl", "Mission Control"),
+        ("appExpose", "App Exposé"), ("launchpad", "Launchpad"),
+        ("spotlight", "Spotlight ⌘Space"),
+        ("closeWindow", "關閉視窗 ⌘W"), ("quitApp", "結束 App ⌘Q"),
+        ("lockScreen", "鎖定螢幕 ⌃⌘Q"),
+        ("screenshotFull", "截圖 全螢幕"), ("screenshotArea", "截圖 選取範圍"),
+    ]),
+    ("媒體", [
+        ("volumeUp", "音量 +"), ("volumeDown", "音量 −"), ("volumeMute", "靜音"),
+        ("brightnessUp", "亮度 +"), ("brightnessDown", "亮度 −"),
+        ("playPause", "播放／暫停"), ("nextTrack", "下一曲"), ("previousTrack", "上一曲"),
+        ("scrollUp", "向上捲動"), ("scrollDown", "向下捲動"),
+    ]),
 ]
+
+let actionCatalog: [(String, String)] = actionGroups.flatMap { $0.1 } + [("none", "無")]
 
 let actionMapKey = "actionMap"
 var actionMap: [String: String] = [:]
@@ -674,26 +696,91 @@ if let saved = UserDefaults.standard.dictionary(forKey: actionMapKey) as? [Strin
     actionMap = defaultActions
 }
 
+// MARK: - Custom actions: shell command / URL
+
+func runShell(_ command: String) {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/bin/zsh")
+    p.arguments = ["-lc", command]
+    do {
+        try p.run()
+        log("sh: \(command)")
+    } catch {
+        log("sh failed: \(error.localizedDescription)")
+    }
+}
+
+func openTarget(_ target: String) {
+    let t = target.trimmingCharacters(in: .whitespaces)
+    if let url = URL(string: t), let scheme = url.scheme?.lowercased(),
+       ["http", "https", "mailto", "shortcuts", "raycast"].contains(scheme) {
+        NSWorkspace.shared.open(url)
+        log("open url: \(t)")
+    } else {
+        let path = (t as NSString).expandingTildeInPath
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
+        log("open path: \(path)")
+    }
+}
+
+func scrollWheel(_ lines: Int32) {
+    guard let e = CGEvent(scrollWheelEvent2Source: nil, units: .line,
+                          wheelCount: 1, wheel1: lines, wheel2: 0, wheel3: 0) else { return }
+    e.post(tap: .cghidEventTap)
+}
+
 func perform(_ action: String) {
+    if action.hasPrefix("sh:") { return runShell(String(action.dropFirst(3))) }
+    if action.hasPrefix("open:") { return openTarget(String(action.dropFirst(5))) }
+
     switch action {
     case "arrowUp": sendKey(126)
     case "arrowDown": sendKey(125)
     case "arrowLeft": sendKey(123)
     case "arrowRight": sendKey(124)
     case "returnKey": sendKey(36)
+    case "keypadEnter": sendKey(76)
     case "escape": sendKey(53)
-    case "deleteBackward": sendKey(51)
     case "tab": sendKey(48)
     case "space": sendKey(49)
+    case "deleteBackward": sendKey(51)
+    case "deleteForward": sendKey(117)
+    case "homeKey": sendKey(115)
+    case "endKey": sendKey(119)
+    case "pageUp": sendKey(116)
+    case "pageDown": sendKey(121)
+
+    case "copy": sendKey(8, flags: .maskCommand)
+    case "paste": sendKey(9, flags: .maskCommand)
+    case "cut": sendKey(7, flags: .maskCommand)
+    case "selectAll": sendKey(0, flags: .maskCommand)
+    case "undo": sendKey(6, flags: .maskCommand)
+    case "save": sendKey(1, flags: .maskCommand)
+    case "find": sendKey(3, flags: .maskCommand)
+
     case "appSwitcher": sendKey(48, flags: .maskCommand)
     case "missionControl": sendKey(126, flags: .maskControl)
+    case "appExpose": sendKey(125, flags: .maskControl)
+    case "launchpad": runShell("open -a Launchpad")
+    case "spotlight": sendKey(49, flags: .maskCommand)
+    case "closeWindow": sendKey(13, flags: .maskCommand)
+    case "quitApp": sendKey(12, flags: .maskCommand)
+    case "lockScreen": sendKey(12, flags: [.maskCommand, .maskControl])
+    case "screenshotFull": sendKey(20, flags: [.maskCommand, .maskShift])
+    case "screenshotArea": sendKey(21, flags: [.maskCommand, .maskShift])
+
     case "volumeUp": sendMediaKey(0)
     case "volumeDown": sendMediaKey(1)
     case "volumeMute": sendMediaKey(7)
+    case "brightnessUp": sendMediaKey(2)
+    case "brightnessDown": sendMediaKey(3)
     case "playPause": sendMediaKey(16)
     case "nextTrack": sendMediaKey(17)
     case "previousTrack": sendMediaKey(18)
-    default: break
+    case "scrollUp": scrollWheel(3)
+    case "scrollDown": scrollWheel(-3)
+
+    default: log("  unknown action \(action)")
     }
 }
 
@@ -762,6 +849,14 @@ final class StatusController: NSObject {
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
         if let button = item.button {
+            for name in ["av.remote.fill", "av.remote", "dot.radiowaves.left.and.right"] {
+                if let img = NSImage(systemSymbolName: name, accessibilityDescription: "RBMini") {
+                    img.isTemplate = true
+                    button.image = img
+                    button.imagePosition = .imageLeading
+                    break
+                }
+            }
             button.title = "RBMini"
             button.toolTip = "RBMini — G9N9N remote bridge"
         }
@@ -786,18 +881,84 @@ final class StatusController: NSObject {
         let root = NSMenu()
         for button in buttonOrder {
             let item = NSMenuItem(title: buttonLabels[button] ?? button, action: nil, keyEquivalent: "")
-            let sub = NSMenu()
-            for (id, label) in actionCatalog {
-                let action = NSMenuItem(title: label, action: #selector(selectAction(_:)), keyEquivalent: "")
-                action.target = self
-                action.representedObject = [button, id]
-                action.state = ((actionMap[button] ?? "none") == id) ? .on : .off
-                sub.addItem(action)
-            }
-            item.submenu = sub
+            item.submenu = buildActionMenu(for: button)
             root.addItem(item)
         }
         return root
+    }
+
+    private func buildActionMenu(for button: String) -> NSMenu {
+        let sub = NSMenu()
+        let current = actionMap[button] ?? "none"
+
+        for (groupTitle, actions) in actionGroups {
+            sub.addItem(.sectionHeader(title: groupTitle))
+            for (id, label) in actions {
+                let mi = NSMenuItem(title: label, action: #selector(selectAction(_:)), keyEquivalent: "")
+                mi.target = self
+                mi.representedObject = [button, id]
+                mi.state = (current == id) ? .on : .off
+                sub.addItem(mi)
+            }
+        }
+
+        sub.addItem(.sectionHeader(title: "自訂"))
+        let custom = NSMenuItem(title: "執行指令／開網址…", action: #selector(promptCustom(_:)), keyEquivalent: "")
+        custom.target = self
+        custom.representedObject = button
+        sub.addItem(custom)
+
+        if current.hasPrefix("sh:") || current.hasPrefix("open:") {
+            let body = current.hasPrefix("sh:") ? String(current.dropFirst(3)) : String(current.dropFirst(5))
+            let info = NSMenuItem(title: "目前：\(body)", action: nil, keyEquivalent: "")
+            info.state = .on
+            sub.addItem(info)
+            let clear = NSMenuItem(title: "清除自訂動作", action: #selector(selectAction(_:)), keyEquivalent: "")
+            clear.target = self
+            clear.representedObject = [button, "none"]
+            sub.addItem(clear)
+        }
+
+        let none = NSMenuItem(title: "無", action: #selector(selectAction(_:)), keyEquivalent: "")
+        none.target = self
+        none.representedObject = [button, "none"]
+        none.state = (current == "none") ? .on : .off
+        sub.addItem(none)
+        return sub
+    }
+
+    @objc private func promptCustom(_ sender: NSMenuItem) {
+        guard let button = sender.representedObject as? String else { return }
+        NSApp.activate(ignoringOtherApps: true)
+
+        let alert = NSAlert()
+        alert.messageText = "自訂動作 — \(buttonLabels[button] ?? button)"
+        alert.informativeText = """
+        輸入 shell 指令，例如：open -a Music
+        或以 http:// 開頭的網址，例如：https://youtube.com
+        指令會以 /bin/zsh -lc 執行。
+        """
+        alert.addButton(withTitle: "儲存")
+        alert.addButton(withTitle: "取消")
+
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 420, height: 24))
+        field.placeholderString = "open -a Music"
+        if let cur = actionMap[button] {
+            if cur.hasPrefix("sh:") { field.stringValue = String(cur.dropFirst(3)) }
+            else if cur.hasPrefix("open:") { field.stringValue = String(cur.dropFirst(5)) }
+        }
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let text = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        let lower = text.lowercased()
+        actionMap[button] = (lower.hasPrefix("http://") || lower.hasPrefix("https://"))
+            ? "open:\(text)" : "sh:\(text)"
+        saveActionMap()
+        rebuild()
+        log("mapping \(button) -> \(actionMap[button] ?? "")")
     }
 
     @objc private func selectAction(_ sender: NSMenuItem) {
